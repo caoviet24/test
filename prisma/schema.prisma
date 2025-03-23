@@ -1,0 +1,420 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Quản lý người dùng và phân quyền
+model User {
+  id                  String      @id 
+  username            String
+  password            String
+  full_name           String
+  gender              Int
+  avatar              String
+  original_address    String
+  current_address     String
+  email               String?     @unique
+  phone_number        String
+  role                Role        @default(STUDENT)
+  created_at          DateTime    @default(now())
+  created_by          String
+  updated_at          DateTime?    @updatedAt
+  updated_by          String?
+  is_deleted          Boolean?
+  deleted_by          String? 
+  deleted_at          DateTime?
+
+  // Relations for Student
+  studentProfile      Student?
+  studentClasses      StudentClass[]
+  studentCourses      StudentCourse[]
+  submissions         Submission[]
+  examAttempts        ExamAttempt[]
+  notifications       Notification[]    @relation("notifications_received")
+  notifications_sent  Notification[]    @relation("notifications_sent")
+
+  // Relations for Lecturer
+  lecturerProfile     Lecturer?
+  coursesCreated      Course[]         @relation("courses_created")
+  classesManaged      Class[]          @relation("classes_managed")
+  examinations        Examination[]
+  assignments         Assignment[]
+  feedbacks_given     Feedback[]       @relation("feedback_lecturer")
+  feedbacks_received  Feedback[]       @relation("feedback_student")
+
+  // Relations for tracking created/updated/deleted records
+  faculties_created   Faculty[]        @relation("faculty_created")
+  faculties_updated   Faculty[]        @relation("faculty_updated")
+  faculties_deleted   Faculty[]        @relation("faculty_deleted")
+  
+  majors_created      Major[]          @relation("major_created")
+  majors_updated      Major[]          @relation("major_updated")
+  majors_deleted      Major[]          @relation("major_deleted")
+
+  courses_updated     Course[]         @relation("course_updated")
+  courses_deleted     Course[]         @relation("course_deleted")
+
+  news_created        News[]           @relation("news_created")
+  news_updated        News[]           @relation("news_updated")
+  news_deleted        News[]           @relation("news_deleted")
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  LECTURER
+  STUDENT
+  UNDEFINED
+}
+
+// Thông tin sinh viên
+model Student {
+  id                String      @id 
+  student_id        String      @unique
+  user_id           String      @unique
+  faculty_id        String      
+  major_id          String      
+  class_id          String      
+  user              User        @relation(fields: [user_id], references: [id])
+  faculty           Faculty     @relation(fields: [faculty_id], references: [id])
+  major             Major       @relation(fields: [major_id], references: [id])
+  class             Class       @relation(fields: [class_id], references: [id])
+
+  @@map("students") 
+}
+
+// Thông tin giảng viên
+model Lecturer {
+  id                String      @id 
+  lecturer_id       String      @unique
+  user_id           String      @unique
+  faculty_id        String      
+  major_id          String      
+  user              User        @relation(fields: [user_id], references: [id])
+  faculty           Faculty     @relation(fields: [faculty_id], references: [id])
+  major             Major       @relation(fields: [major_id], references: [id])
+  classes           LecturerClass[]
+
+  @@map("lecturers")
+}
+
+// Quản lý khoa
+model Faculty {
+  id                String      @id 
+  name              String
+  code              String      @unique
+  created_at        DateTime    @default(now())
+  created_by        String
+  updated_at        DateTime?    @updatedAt
+  updated_by        String?
+  is_deleted        Boolean?
+  deleted_by        String? 
+  deleted_at        DateTime? 
+
+  majors            Major[]
+  classes           Class[]
+  students          Student[]
+  lecturers         Lecturer[]
+  notifications     Notification[] @relation("faculty_notifications")
+
+  createdUser       User        @relation("faculty_created", fields: [created_by], references: [id])
+  updatedUser       User?       @relation("faculty_updated", fields: [updated_by], references: [id])
+  deletedUser       User?       @relation("faculty_deleted", fields: [deleted_by], references: [id])
+
+  @@map("faculties")
+}
+
+//Quản lý ngành học
+model Major {
+  id                String      @id 
+  name              String
+  code              String      
+  faculty_id        String      
+  created_at        DateTime    @default(now())
+  created_by        String
+  updated_at        DateTime?    @updatedAt
+  updated_by        String?
+  is_deleted        Boolean?
+  deleted_by        String? 
+  deleted_at        DateTime?   
+  faculty           Faculty     @relation(fields: [faculty_id], references: [id])
+
+  classes           Class[]
+  students          Student[]
+  lecturers         Lecturer[]
+  notifications     Notification[] @relation("major_notifications")
+
+  createdUser       User        @relation("major_created", fields: [created_by], references: [id])
+  updatedUser       User?       @relation("major_updated", fields: [updated_by], references: [id])
+  deletedUser       User?       @relation("major_deleted", fields: [deleted_by], references: [id])
+
+  @@map("majors")
+}
+
+// Quản lý lớp học
+model Class {
+  id                String      @id 
+  name              String
+  code              String      @unique
+  faculty_id        String      
+  major_id          String      
+  lecturer_id       String      
+  
+  faculty           Faculty     @relation(fields: [faculty_id], references: [id])
+  major             Major       @relation(fields: [major_id], references: [id])
+  lecturer          User        @relation("classes_managed", fields: [lecturer_id], references: [id])
+
+  students          StudentClass[]
+  examinations      Examination[]
+  assignments       Assignment[]
+  notifications     Notification[] @relation("class_notifications")
+  lecturerClasses   LecturerClass[]
+  studentProfiles   Student[]
+
+  @@map("classes")
+}
+
+//Quan hệ giảng viên - lớp học
+model LecturerClass {
+  lecturer_id      String 
+  class_id         String
+  started_at       DateTime     @default(now())
+  ended_at         DateTime?
+  class            Class        @relation(fields: [class_id], references: [id])
+  lecturer         Lecturer     @relation(fields: [lecturer_id], references: [id])
+
+  @@id([lecturer_id, class_id])
+  @@map("lecturer_classes")
+}
+
+// Quan hệ sinh viên-lớp học
+model StudentClass {
+  student_id       String 
+  class_id         String
+  joined_at        DateTime   @default(now())
+  class            Class      @relation(fields: [class_id], references: [id])
+  student          User       @relation(fields: [student_id], references: [id])
+
+  @@id([student_id, class_id])
+  @@map("student_classes")
+}
+
+// Quản lý khóa học
+model Course {
+  id              String        @id 
+  title           String
+  description     String        @db.Text
+  thumbnail       String?
+  status          CourseStatus  @default(PRIVATE)
+  active          Boolean       @default(false)
+  created_at      DateTime    @default(now())
+  created_by      String
+  updated_at      DateTime?    @updatedAt
+  updated_by      String?
+  is_deleted      Boolean?
+  deleted_by      String? 
+  deleted_at      DateTime?
+
+  createdUser     User          @relation("courses_created", fields: [created_by], references: [id])
+  updatedUser     User?         @relation("course_updated", fields: [updated_by], references: [id])
+  deletedUser     User?         @relation("course_deleted", fields: [deleted_by], references: [id])
+
+  lessons         Lesson[]
+  students        StudentCourse[]
+
+  @@map("courses")
+}
+
+enum CourseStatus {
+  PRIVATE
+  PUBLIC
+}
+
+// Quan hệ sinh viên-khóa học
+model StudentCourse {
+  student_id        String
+  course_id         String
+  progress          Float     @default(0)
+  joined_at         DateTime  @default(now())
+  student           User      @relation(fields: [student_id], references: [id])
+  course            Course    @relation(fields: [course_id], references: [id])
+
+  @@id([student_id, course_id])
+  @@map("student_courses")
+}
+
+// Quản lý nội dung bài học của khóa học
+model Lesson {
+  id                String      @id 
+  title             String
+  content           String      @db.Text
+  video_url         String?
+  documents         Document[]
+  course_id         String
+  order             Int
+  course            Course      @relation(fields: [course_id], references: [id])
+
+  @@map("lessons")
+}
+
+// Quản lý tài liệu
+model Document {
+  id          String      @id 
+  title       String
+  fileUrl     String
+  lesson_id   String
+  lesson      Lesson      @relation(fields: [lesson_id], references: [id])
+
+  @@map("documents")
+}
+
+// Quản lý bài tập
+model Assignment {
+  id              String      @id 
+  title           String
+  description     String      @db.Text
+  due_date        DateTime
+  class_id        String
+  lecturer_id     String
+  class           Class       @relation(fields: [class_id], references: [id])
+  lecturer        User        @relation(fields: [lecturer_id], references: [id])
+  submissions     Submission[]
+
+  @@map("assignments")
+}
+
+// Quản lý bài nộp
+model Submission {
+  id              String      @id 
+  content         String      @db.Text
+  file_url        String?
+  grade           Float?
+  feedback        String?     @db.Text
+  submitted_at    DateTime    @default(now())
+  assignment_id   String
+  student_id      String
+  assignment      Assignment  @relation(fields: [assignment_id], references: [id])
+  student         User        @relation(fields: [student_id], references: [id])
+
+  @@map("submissions")
+}
+
+// Quản lý bài kiểm tra
+model Examination {
+  id              String      @id 
+  title           String
+  description     String      @db.Text
+  start_time      DateTime
+  duration        Int      // Thời gian làm bài (phút)
+  class_id        String
+  lecturer_id     String
+  class           Class       @relation(fields: [class_id], references: [id])
+  lecturer        User        @relation(fields: [lecturer_id], references: [id])
+  questions       Question[]
+  attempts        ExamAttempt[]
+
+  @@map("examinations")
+}
+
+// Câu hỏi kiểm tra
+model Question {
+  id                String      @id 
+  content           String      @db.Text
+  type              QuestionType
+  options           Json?    // Cho câu hỏi trắc nghiệm
+  answer            String      @db.Text
+  points            Float
+  examination_id    String
+  examination       Examination @relation(fields: [examination_id], references: [id])
+
+  @@map("questions")
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  ESSAY
+}
+
+// Bài làm kiểm tra
+model ExamAttempt {
+  id                String      @id 
+  answers           Json
+  score             Float?
+  feedback          String?     @db.Text
+  started_at        DateTime    @default(now())
+  submitted_at      DateTime?
+  examination_id    String
+  student_id        String
+  examination       Examination @relation(fields: [examination_id], references: [id])
+  student           User        @relation(fields: [student_id], references: [id])
+
+  @@map("exam_attempts")
+}
+
+// Quản lý nhận xét
+model Feedback {
+  id                String      @id 
+  content           String      @db.Text
+  lecturer_id       String
+  student_id        String
+  created_at        DateTime    @default(now())
+  lecturer          User        @relation("feedback_lecturer", fields: [lecturer_id], references: [id])
+  student           User        @relation("feedback_student", fields: [student_id], references: [id])
+  is_deleted        Boolean     @default(false)
+  deleted_at        DateTime?
+
+  @@map("feedbacks")
+}
+
+// Quản lý thông báo
+model Notification {
+  id          String    @id
+  title       String
+  content     String    @db.Text
+  is_read     Boolean   @default(false)
+  user_id     String?   // Nullable for notifications sent to all users
+  faculty_id  String?
+  major_id    String? 
+  class_id    String?
+  sender_id   String    // Who sent the notification
+  created_at  DateTime  @default(now())
+  is_deleted  Boolean   @default(false)
+  deleted_at  DateTime?
+  is_for_all  Boolean   @default(false) // True if sent to all users
+   
+  user        User?     @relation("notifications_received", fields: [user_id], references: [id])
+  sender      User      @relation("notifications_sent", fields: [sender_id], references: [id])
+  faculty     Faculty?  @relation("faculty_notifications", fields: [faculty_id], references: [id])
+  major       Major?    @relation("major_notifications", fields: [major_id], references: [id])
+  class       Class?    @relation("class_notifications", fields: [class_id], references: [id])
+
+  @@map("notifications")
+}
+
+// Quản lý tin tức
+model News {
+  id              String    @id 
+  title           String
+  content         String    @db.Text
+  thumbnail       String?
+  is_approved     Boolean   @default(false)
+  created_at      DateTime    @default(now())
+  created_by      String
+  updated_at      DateTime?    @updatedAt
+  updated_by      String?
+  is_deleted      Boolean?
+  deleted_by      String? 
+  deleted_at      DateTime?
+
+
+  createdUser     User          @relation("news_created", fields: [created_by], references: [id])
+  updatedUser     User?         @relation("news_updated", fields: [updated_by], references: [id])
+  deletedUser     User?         @relation("news_deleted", fields: [deleted_by], references: [id])
+
+  @@map("news")
+}
